@@ -1,0 +1,278 @@
+'use strict'
+
+
+var Publication = require('../models/publication');
+var Notification = require('../models/notification'); // Importar modelo de Notificación
+var UserModel = require('../models/user'); // Importar modelo de Usuario para obtener datos del emisor
+const path = require('path');
+const moment = require('moment');
+
+//Verificar Tipo de Archivo
+function getFileType(mimetype) {
+    if (mimetype.startsWith('image/')) return 'image';
+    if (mimetype.startsWith('video/')) return 'video';
+    if (mimetype.startsWith('application/') || mimetype === 'text/plain') return 'document';
+    return 'other';
+}
+
+
+// Guardar publicación con archivos
+
+
+    async function savePublication(req, res) {
+        
+
+        const { title, text } = req.body;
+        const userId = req.user.sub;
+
+        if (!title || !text) {
+            return res.status(400).send({ message: 'Título y texto son requeridos.' });
+        }
+
+        try {
+            const filesData = [];
+
+            if (req.files && req.files.length > 0) {
+                req.files.forEach(file => {
+                    filesData.push({
+                        path: file.path.replace(/\\/g, '/'),
+                        originalName: file.originalname,
+                        mimeType: file.mimetype,
+                        fileType: getFileType(file.mimetype)
+                    });
+                });
+            }
+
+            const publication = new Publication({
+                title,
+                text,
+                user: userId,
+                files: filesData,
+                created_at: moment().format()
+            });
+
+            const publicationStored = await publication.save();
+
+            // ✅ Emitir publicación a seguidores
+            const io = req.app.get('socketio');
+            // CAMBIO AQUÍ: Usar UserModel en lugar de User
+
+            const user = await UserModel.findById(userId).populate('followers', '_id');
+            
+            if (user?.followers?.length > 0) {
+    user.followers.forEach(follower => {
+        io.to(follower._id.toString()).emit('newPublication', {
+            publication: publicationStored,
+            author: {
+                _id: user._id,
+                name: user.name,
+                surname: user.surname,
+                image: user.image
+            }
+        });
+    });
+}
+
+
+            return res.status(200).send({ publication: publicationStored });
+
+        } catch (err) {
+            return res.status(500).send({ message: 'Error al guardar publicación', error: err.message });
+        }
+    }
+
+
+
+async function getPublications(req, res) {
+    try {
+        const publications = await Publication.find()
+            .populate('user', 'name surname image _id')
+            .sort('-created_at');
+
+        return res.status(200).send({ publications });
+
+    } catch (err) {
+        return res.status(500).send({ message: 'Error al obtener publicaciones', error: err.message });
+    }
+}
+
+async function getPublication(req, res) {
+    const publicationId = req.params.id;
+
+    try {
+        const publication = await Publication.findById(publicationId);
+
+        if (!publication)
+            return res.status(404).send({ message: 'No existe la publicación' });
+
+        return res.status(200).send({ publication });
+    } catch (err) {
+        return res.status(500).send({ message: 'Error al devolver publicaciones', error: err.message });
+    }
+}
+
+async function deletePublication(req, res) {
+    const publicationId = req.params.id;
+    const userId = req.user.sub;
+
+    try {
+        const result = await Publication.deleteOne({ _id: publicationId, user: userId });
+
+        if (result.deletedCount === 0)
+            return res.status(404).send({ message: 'No se encontró la publicación o no tienes permiso' });
+
+        return res.status(200).send({ message: 'Publicación eliminada' });
+    } catch (err) {
+        return res.status(500).send({ message: 'Error al borrar la publicación', error: err.message });
+    }
+}
+
+async function likePublication(req, res) {
+    const publicationId = req.params.id;
+    const userId = req.user.sub;
+
+    try {
+        const publicationUpdated = await Publication.findByIdAndUpdate(
+            publicationId,
+            { $addToSet: { likes: userId } },
+            { new: true }
+        ).populate('user', '_id'); // Popula el usuario de la publicación para obtener su ID
+
+        if (!publicationUpdated)
+            return res.status(404).send({ message: 'No se ha podido dar like' });
+
+        // Si el usuario que da like no es el mismo que el autor de la publicación, crear notificación
+        if (publicationUpdated.user._id.toString() !== userId) {
+            const notification = new Notification({
+                type: 'like',
+                read: false,
+                created_at: new Date(),
+                emitter: userId, // Quien dio like
+                receiver: publicationUpdated.user._id, // Autor de la publicación
+                publication: publicationUpdated._id
+            });
+            await notification.save();
+
+            // Emitir la notificación en tiempo real al autor de la publicación
+            const io = req.app.get('socketio');
+            io.to(publicationUpdated.user._id.toString()).emit('newNotification', notification);
+            console.log(`Notificación de like enviada por WebSocket a ${publicationUpdated.user._id}`);
+        }
+
+        return res.status(200).send({ publication: publicationUpdated });
+    } catch (err) {
+        return res.status(500).send({ message: 'Error al dar like', error: err.message });
+    }
+}
+
+async function unlikePublication(req, res) {
+    const publicationId = req.params.id;
+    const userId = req.user.sub;
+
+    try {
+        const publicationUpdated = await Publication.findByIdAndUpdate(
+            publicationId,
+            { $pull: { likes: userId } },
+            { new: true }
+        );
+
+        if (!publicationUpdated)
+            return res.status(404).send({ message: 'No se ha podido quitar like' });
+
+        // Opcional: Eliminar la notificación de like si se quita el like
+        await Notification.deleteOne({
+            type: 'like',
+            emitter: userId,
+            publication: publicationId
+        });
+
+        return res.status(200).send({ publication: publicationUpdated });
+    } catch (err) {
+        return res.status(500).send({ message: 'Error al quitar like', error: err.message });
+    }
+}
+
+async function addComment(req, res) {
+    const publicationId = req.params.id;
+    const params = req.body;
+
+    if (!params.text) 
+        return res.status(400).send({ message: 'Debes enviar un comentario' });
+
+    const comment = {
+        user: req.user.sub,
+        text: params.text,
+        created_at: new Date()
+    };
+
+    try {
+        const publicationUpdated = await Publication.findByIdAndUpdate(
+            publicationId,
+            { $push: { comments: comment } },
+            { new: true }
+        ).populate('user', '_id'); // Popula el usuario de la publicación para obtener su ID
+
+        if (!publicationUpdated)
+            return res.status(404).send({ message: 'No se ha podido comentar' });
+
+        // Si el usuario que comenta no es el mismo que el autor de la publicación, crear notificación
+        if (publicationUpdated.user._id.toString() !== req.user.sub) {
+            const notification = new Notification({
+                type: 'comment',
+                read: false,
+                created_at: new Date(),
+                emitter: req.user.sub, // Quien comentó
+                receiver: publicationUpdated.user._id, // Autor de la publicación
+                publication: publicationUpdated._id
+            });
+            await notification.save();
+
+            // Emitir la notificación en tiempo real al autor de la publicación
+            const io = req.app.get('socketio');
+            io.to(publicationUpdated.user._id.toString()).emit('newNotification', notification);
+            console.log(`Notificación de comentario enviada por WebSocket a ${publicationUpdated.user._id}`);
+        }
+
+        return res.status(200).send({ publication: publicationUpdated });
+    } catch (err) {
+        return res.status(500).send({ message: 'Error al comentar', error: err.message });
+    }
+}
+
+async function deleteComment(req, res) {
+    const publicationId = req.params.id;
+    const commentId = req.params.commentId;
+
+    try {
+        const publicationUpdated = await Publication.findByIdAndUpdate(
+            publicationId,
+            { $pull: { comments: { _id: commentId } } },
+            { new: true }
+        );
+
+        if (!publicationUpdated) {
+            return res.status(404).send({ message: 'No se ha podido borrar el comentario' });
+        }
+
+        // Opcional: Eliminar la notificación de comentario si se borra el comentario
+        await Notification.deleteOne({
+            type: 'comment',
+            'comments._id': commentId // Asumiendo que la notificación guarda el ID del comentario
+        });
+
+        return res.status(200).send({ publication: publicationUpdated });
+    } catch (err) {
+        return res.status(500).send({ message: 'Error al borrar comentario', error: err.message });
+    }
+}
+
+module.exports = {
+    savePublication,
+    getPublications,
+    getPublication,
+    deletePublication,
+    likePublication,
+    unlikePublication,
+    addComment,
+    deleteComment
+};

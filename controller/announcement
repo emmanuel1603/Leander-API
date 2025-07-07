@@ -1,0 +1,153 @@
+'use strict';
+
+const mongoose = require('mongoose');
+const Announcement = require('../models/announcement');
+const User = require('../models/user');
+
+// Guardar un nuevo anuncio
+async function saveAnnouncement(req, res) {
+    const params = req.body;
+    const userId = req.user.sub;
+
+    if (!params.title || !params.content) {
+        return res.status(400).send({ message: 'El título y el contenido son obligatorios' });
+    }
+
+    try {
+        const announcement = new Announcement({
+            title: params.title,
+            content: params.content,
+            user: userId,
+            expiresAt: params.expiresAt || null
+        });
+
+        const announcementStored = await announcement.save();
+
+        return res.status(200).send({ announcement: announcementStored });
+    } catch (err) {
+        return res.status(500).send({ message: 'Error al guardar el anuncio', error: err.message });
+    }
+}
+
+// Obtener todos los anuncios
+async function getAnnouncements(req, res) {
+    const userId = req.user.sub;
+    const isAdmin = req.user.role === 'ROLE_ADMIN';
+
+    const findQuery = isAdmin ? {} : {
+        $or: [{ user: userId }, { isPublic: true }]
+    };
+
+    try {
+        const announcements = await Announcement.find(findQuery)
+            .populate('user', 'name surname image _id')
+            .sort('-createdAt');
+
+        if (!announcements) {
+            return res.status(404).send({ message: 'No hay anuncios disponibles' });
+        }
+
+        return res.status(200).send({ announcements });
+    } catch (err) {
+        return res.status(500).send({ message: 'Error en la petición', error: err.message });
+    }
+}
+
+// Obtener un anuncio específico
+async function getAnnouncement(req, res) {
+    const announcementId = req.params.id;
+
+    try {
+        const announcement = await Announcement.findById(announcementId)
+            .populate('user', 'name surname image _id');
+
+        if (!announcement) {
+            return res.status(404).send({ message: 'El anuncio no existe' });
+        }
+
+        return res.status(200).send({ announcement });
+    } catch (err) {
+        return res.status(500).send({ message: 'Error en la petición', error: err.message });
+    }
+}
+
+// Actualizar un anuncio
+async function updateAnnouncement(req, res) {
+    const announcementId = req.params.id;
+    const userId = req.user.sub;
+    const update = req.body;
+
+    try {
+        const announcementUpdated = await Announcement.findOneAndUpdate(
+            { _id: announcementId, user: userId },
+            update,
+            { new: true }
+        );
+
+        if (!announcementUpdated) {
+            return res.status(404).send({ message: 'No tienes permisos para editar este anuncio' });
+        }
+
+        return res.status(200).send({ announcement: announcementUpdated });
+    } catch (err) {
+        return res.status(500).send({ message: 'Error en la petición', error: err.message });
+    }
+}
+
+// Eliminar un anuncio
+async function deleteAnnouncement(req, res) {
+    const announcementId = req.params.id;
+    const userId = req.user.sub;
+
+    try {
+        const announcementRemoved = await Announcement.findOneAndDelete({
+            _id: announcementId,
+            user: userId
+        });
+
+        if (!announcementRemoved) {
+            return res.status(404).send({ message: 'No tienes permisos para eliminar este anuncio' });
+        }
+
+        return res.status(200).send({ announcement: announcementRemoved });
+    } catch (err) {
+        return res.status(500).send({ message: 'Error en la petición', error: err.message });
+    }
+}
+
+// Marcar como destacado (solo admin)
+async function highlightAnnouncement(req, res) {
+    const announcementId = req.params.id;
+    const userId = req.user.sub;
+
+    try {
+        const user = await User.findById(userId);
+
+        if (!user || user.role !== 'ROLE_ADMIN') {
+            return res.status(403).send({ message: 'No tienes permisos para esta acción' });
+        }
+
+        const announcementUpdated = await Announcement.findByIdAndUpdate(
+            announcementId,
+            { isHighlighted: true },
+            { new: true }
+        );
+
+        if (!announcementUpdated) {
+            return res.status(404).send({ message: 'El anuncio no existe' });
+        }
+
+        return res.status(200).send({ announcement: announcementUpdated });
+    } catch (err) {
+        return res.status(500).send({ message: 'Error en la petición', error: err.message });
+    }
+}
+
+module.exports = {
+    saveAnnouncement,
+    getAnnouncements,
+    getAnnouncement,
+    updateAnnouncement,
+    deleteAnnouncement,
+    highlightAnnouncement
+};

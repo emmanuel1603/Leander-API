@@ -1,0 +1,187 @@
+'use strict';
+
+var User = require('../models/user');
+var jwt = require('jwt-simple');
+var moment = require('moment');
+var fs = require('fs');
+var path = require('path');
+
+// Función para registrar usuario
+async function saveUser (req, res) {
+    var params = req.body;
+
+    if (!params.name || !params.surname || !params.nick || !params.email || !params.password) {
+        return res.status(400).send({ message: 'Envía todos los campos necesarios' });
+    }
+
+    try {
+        // Verificar si el email o nick ya existen
+        const existingUser  = await User.findOne({
+            $or: [
+                { email: params.email.toLowerCase() },
+                { nick: params.nick.toLowerCase() }
+            ]
+        });
+
+        if (existingUser ) {
+            return res.status(400).send({ message: 'El usuario ya existe' });
+        }
+
+        // Crear nuevo usuario
+        var user = new User();
+        user.name = params.name;
+        user.surname = params.surname;
+        user.nick = params.nick.toLowerCase();
+        user.email = params.email.toLowerCase();
+        user.password = params.password; // La contraseña se cifrará en el pre-save
+        user.image = null;
+
+        // Guardar usuario
+        const userStored = await user.save();
+        return res.status(201).send({ user: userStored });
+    } catch (err) {
+        return res.status(500).send({ message: 'Error al guardar el usuario' });
+    }
+}
+
+// Función para iniciar sesión
+// Función para iniciar sesión
+async function login(req, res) {
+    var params = req.body;
+
+    if (!params.email || !params.password) {
+        return res.status(400).send({ message: 'Envía el email y la contraseña' });
+    }
+
+    try {
+        const user = await User.findOne({ email: params.email.toLowerCase() });
+
+        if (!user) {
+            return res.status(404).send({ message: 'El usuario no existe' });
+        }
+
+        const isMatch = await user.comparePassword(params.password); // <- usar await
+
+        if (!isMatch) {
+            return res.status(401).send({ message: 'Contraseña incorrecta' });
+        }
+
+        // Crear y devolver el token
+        const token = user.createToken();
+        return res.status(200).send({
+            token,
+            user: {
+                id: user._id,
+                name: user.name,
+                surname: user.surname,
+                nick: user.nick,
+                email: user.email
+            }
+        });
+    } catch (err) {
+        return res.status(500).send({ message: 'Error en la petición', error: err.message });
+    }
+}
+
+// Función para subir imagen de usuario
+async function uploadImage(req, res) {
+    const userId = req.params.id;
+
+    if (!req.file) {
+        return res.status(400).send({ message: 'No se ha subido ninguna imagen' });
+    }
+
+    const file_name = req.file.filename;
+    const image_path = `/uploads/users/${file_name}`;
+
+    try {
+        const userUpdated = await User.findByIdAndUpdate(
+            userId,
+            { image: image_path },
+            { new: true }
+        );
+
+        if (!userUpdated) {
+            return res.status(404).send({ message: 'Usuario no encontrado' });
+        }
+
+        return res.status(200).send({ user: userUpdated });
+    } catch (err) {
+        return res.status(500).send({ message: 'Error al guardar la imagen', error: err.message });
+    }
+}
+
+// Función para seguir a un usuario
+async function followUser(req, res) {
+    const userId = req.params.id;
+    const followerId = req.user.sub;
+
+    if (userId === followerId) {
+        return res.status(400).send({ message: 'No puedes seguirte a ti mismo' });
+    }
+
+    try {
+        const userToFollow = await User.findById(userId);
+        const follower = await User.findById(followerId);
+
+        if (!userToFollow || !follower) {
+            return res.status(404).send({ message: 'Usuario no encontrado' });
+        }
+
+        // Evitar duplicados
+        if (!userToFollow.followers.includes(followerId)) {
+            userToFollow.followers.push(followerId);
+        }
+
+        if (!follower.following.includes(userId)) {
+            follower.following.push(userId);
+        }
+
+        await userToFollow.save();
+        await follower.save();
+
+        return res.status(200).send({ message: 'Ahora sigues a ' + userToFollow.nick });
+    } catch (err) {
+        console.error('Error al seguir al usuario:', err);
+        return res.status(500).send({ message: 'Error al seguir al usuario', error: err.message });
+    }
+}
+
+// Función para dejar de seguir a un usuario
+async function unfollowUser (req, res) {
+    var userId = req.params.id;
+    var followerId = req.user.sub;
+
+    if (userId === followerId) {
+        return res.status(400).send({ message: 'No puedes dejar de seguirte a ti mismo' });
+    }
+
+    try {
+        const userToUnfollow = await User.findById(userId);
+        const follower = await User.findById(followerId);
+
+        if (!userToUnfollow || !follower) {
+            return res.status(404).send({ message: 'Usuario no encontrado' });
+        }
+
+        // Eliminar al usuario de la lista de seguidores
+        userToUnfollow.followers.pull(followerId);
+        follower.following.pull(userId);
+
+        await userToUnfollow.save();
+        await follower.save();
+
+        return res.status(200).send({ message: 'Has dejado de seguir a ' + userToUnfollow.nick });
+    } catch (err) {
+        return res.status(500).send({ message: 'Error al dejar de seguir al usuario' });
+    }
+}
+
+// Exportar funciones
+module.exports = {
+    saveUser ,
+    login,
+    uploadImage,
+    followUser ,
+    unfollowUser 
+};
