@@ -3,8 +3,7 @@ const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
 const PublicationSchema = Schema({
-    title: { type: String, required: true }, // NUEVO CAMPO
-    title: String,
+title: { type: String, required: true },
     text: String,
     files: [{
         path: String,
