@@ -265,6 +265,20 @@ async function deleteComment(req, res) {
         return res.status(500).send({ message: 'Error al borrar comentario', error: err.message });
     }
 }
+// Obtener publicaciones del usuario autenticado
+async function getMyPublications(req, res) {
+    const userId = req.user.sub;
+
+    try {
+        const myPublications = await Publication.find({ user: userId })
+            .populate('user', 'name surname image _id')
+            .sort('-created_at');
+
+        return res.status(200).send({ publications: myPublications });
+    } catch (err) {
+        return res.status(500).send({ message: 'Error al obtener tus publicaciones', error: err.message });
+    }
+}
 
 module.exports = {
     savePublication,
@@ -274,5 +288,6 @@ module.exports = {
     likePublication,
     unlikePublication,
     addComment,
-    deleteComment
+    deleteComment,
+    getMyPublications
 };
