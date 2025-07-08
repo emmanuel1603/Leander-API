@@ -104,7 +104,7 @@ async function uploadImage(req, res) {
     const image_path = `/uploads/user/${file_name}`;
 
     try {
-        const userUpdated = await user.findByIdAndUpdate(
+        const userUpdated = await User.findByIdAndUpdate(
             userId,
             { image: image_path },
             { new: true }
