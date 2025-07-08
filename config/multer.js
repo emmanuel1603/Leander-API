@@ -4,7 +4,7 @@ const path = require('path');
 // Configuración de almacenamiento
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
-        cb(null, './uploads/users'); // Carpeta donde se guardan
+        cb(null, './uploads/user'); // Carpeta donde se guardan
     },
     filename: function (req, file, cb) {
         const ext = path.extname(file.originalname);

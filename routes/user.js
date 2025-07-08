@@ -14,5 +14,9 @@ api.post('/login', UserController.login);
 api.post('/upload-image-user/:id', md_auth.ensureAuth, upload.single('image'), UserController.uploadImage);
 api.post('/follow/:id', md_auth.ensureAuth, UserController.followUser );
 api.post('/unfollow/:id', md_auth.ensureAuth, UserController.unfollowUser );
+api.get('/users', md_auth.ensureAuth, UserController.getUsers);
+api.get('/followers/:id', md_auth.ensureAuth, UserController.getFollowers);
+api.get('/following/:id', md_auth.ensureAuth, UserController.getFollowing);
+api.get('/user/:id', md_auth.ensureAuth, UserController.getUser);
 
 module.exports = api;

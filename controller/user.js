@@ -1,6 +1,6 @@
 'use strict';
 
-var User = require('../models/user');
+var user = require('../models/user');
 var jwt = require('jwt-simple');
 var moment = require('moment');
 var fs = require('fs');
@@ -92,10 +92,10 @@ async function uploadImage(req, res) {
     }
 
     const file_name = req.file.filename;
-    const image_path = `/uploads/users/${file_name}`;
+    const image_path = `/uploads/user/${file_name}`;
 
     try {
-        const userUpdated = await User.findByIdAndUpdate(
+        const userUpdated = await user.findByIdAndUpdate(
             userId,
             { image: image_path },
             { new: true }
@@ -121,8 +121,8 @@ async function followUser(req, res) {
     }
 
     try {
-        const userToFollow = await User.findById(userId);
-        const follower = await User.findById(followerId);
+        const userToFollow = await user.findById(userId);
+        const follower = await user.findById(followerId);
 
         if (!userToFollow || !follower) {
             return res.status(404).send({ message: 'Usuario no encontrado' });
@@ -157,8 +157,8 @@ async function unfollowUser (req, res) {
     }
 
     try {
-        const userToUnfollow = await User.findById(userId);
-        const follower = await User.findById(followerId);
+        const userToUnfollow = await user.findById(userId);
+        const follower = await user.findById(followerId);
 
         if (!userToUnfollow || !follower) {
             return res.status(404).send({ message: 'Usuario no encontrado' });
@@ -176,6 +176,65 @@ async function unfollowUser (req, res) {
         return res.status(500).send({ message: 'Error al dejar de seguir al usuario' });
     }
 }
+async function getUsers(req, res) {
+    try {
+        const users = await user.find().select('-password'); // Excluye la contraseña
+        return res.status(200).send({ users });
+    } catch (err) {
+        return res.status(500).send({ message: 'Error al obtener los usuarios', error: err.message });
+    }
+}
+async function getFollowers(req, res) {
+    const userId = req.params.id;
+
+    try {
+        const userData = await user.findById(userId)
+            .populate('followers', 'name surname nick email image')
+            .select('followers');
+
+        if (!userData) {
+            return res.status(404).send({ message: 'Usuario no encontrado' });
+        }
+
+        return res.status(200).send({ followers: userData.followers });
+    } catch (err) {
+        return res.status(500).send({ message: 'Error al obtener los seguidores', error: err.message });
+    }
+}
+// Obtener lista de seguidos por el usuario
+async function getFollowing(req, res) {
+    const userId = req.params.id;
+
+    try {
+        const userData = await user.findById(userId)
+            .populate('following', 'name surname nick email image')
+            .select('following');
+
+        if (!userData) {
+            return res.status(404).send({ message: 'Usuario no encontrado' });
+        }
+
+        return res.status(200).send({ following: userData.following });
+    } catch (err) {
+        return res.status(500).send({ message: 'Error al obtener los seguidos', error: err.message });
+    }
+}
+async function getUser(req, res) {
+    const userId = req.params.id;
+
+    try {
+        const userData = await user.findById(userId)
+            .select('-password'); // Excluye la contraseña
+
+        if (!userData) {
+            return res.status(404).send({ message: 'Usuario no encontrado' });
+        }
+
+        return res.status(200).send({ user: userData });
+    } catch (err) {
+        return res.status(500).send({ message: 'Error al obtener el usuario', error: err.message });
+    }
+}
 
 // Exportar funciones
 module.exports = {
@@ -183,5 +242,10 @@ module.exports = {
     login,
     uploadImage,
     followUser ,
-    unfollowUser 
+    unfollowUser,
+    getUsers,
+    getFollowers,
+    getFollowing,
+    getUser
+     
 };
