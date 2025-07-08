@@ -7,7 +7,7 @@ var fs = require('fs');
 var path = require('path');
 
 // Función para registrar usuario
-async function saveUser (req, res) {
+async function saveUser(req, res) {
     var params = req.body;
 
     if (!params.name || !params.surname || !params.nick || !params.email || !params.password) {
@@ -16,31 +16,39 @@ async function saveUser (req, res) {
 
     try {
         // Verificar si el email o nick ya existen
-        const existingUser  = await User.findOne({
+        const existingUser = await User.findOne({
             $or: [
                 { email: params.email.toLowerCase() },
                 { nick: params.nick.toLowerCase() }
             ]
         });
 
-        if (existingUser ) {
+        if (existingUser) {
             return res.status(400).send({ message: 'El usuario ya existe' });
         }
 
         // Crear nuevo usuario
-        var user = new User();
-        user.name = params.name;
-        user.surname = params.surname;
-        user.nick = params.nick.toLowerCase();
-        user.email = params.email.toLowerCase();
-        user.password = params.password; // La contraseña se cifrará en el pre-save
-        user.image = null;
+        var user = new User({
+            name: params.name,
+            surname: params.surname,
+            nick: params.nick.toLowerCase(),
+            email: params.email.toLowerCase(),
+            password: params.password, // Será cifrada en pre-save
+            image: null
+        });
+
+        // Si se subió una imagen
+        if (req.file) {
+            const image_path = `/uploads/user/${req.file.filename}`;
+            user.image = image_path;
+        }
 
         // Guardar usuario
         const userStored = await user.save();
         return res.status(201).send({ user: userStored });
+
     } catch (err) {
-        return res.status(500).send({ message: 'Error al guardar el usuario' });
+        return res.status(500).send({ message: 'Error al guardar el usuario', error: err.message });
     }
 }
 
