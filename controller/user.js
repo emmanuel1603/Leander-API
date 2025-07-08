@@ -34,7 +34,8 @@ async function saveUser(req, res) {
             nick: params.nick.toLowerCase(),
             email: params.email.toLowerCase(),
             password: params.password, // Será cifrada en pre-save
-            image: null
+            image: null,
+            role: params.role || 'ROLE_USER' // 👈 asignar rol si viene, sino usar por defecto
         });
 
         // Si se subió una imagen
@@ -243,6 +244,32 @@ async function getUser(req, res) {
         return res.status(500).send({ message: 'Error al obtener el usuario', error: err.message });
     }
 }
+async function updateUserRole(req, res) {
+    const userId = req.params.id;
+    const { role } = req.body;
+
+    const allowedRoles = ['ROLE_USER', 'ROLE_ADMIN'];
+
+    if (!allowedRoles.includes(role)) {
+        return res.status(400).send({ message: 'Rol no permitido' });
+    }
+
+    try {
+        const userUpdated = await User.findByIdAndUpdate(
+            userId,
+            { role },
+            { new: true }
+        ).select('-password');
+
+        if (!userUpdated) {
+            return res.status(404).send({ message: 'Usuario no encontrado' });
+        }
+
+        return res.status(200).send({ user: userUpdated });
+    } catch (err) {
+        return res.status(500).send({ message: 'Error al actualizar el rol', error: err.message });
+    }
+}
 
 // Exportar funciones
 module.exports = {
@@ -254,6 +281,7 @@ module.exports = {
     getUsers,
     getFollowers,
     getFollowing,
-    getUser
+    getUser,
+    updateUserRole
      
 };
