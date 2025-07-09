@@ -84,7 +84,9 @@ async function login(req, res) {
                 name: user.name,
                 surname: user.surname,
                 nick: user.nick,
-                email: user.email
+                email: user.email,
+                role: user.role,
+                image: user.image
             }
         });
     } catch (err) {
@@ -130,8 +132,8 @@ async function followUser(req, res) {
     }
 
     try {
-        const userToFollow = await user.findById(userId);
-        const follower = await user.findById(followerId);
+        const userToFollow = await User.findById(userId);
+        const follower = await User.findById(followerId);
 
         if (!userToFollow || !follower) {
             return res.status(404).send({ message: 'Usuario no encontrado' });
