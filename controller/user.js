@@ -189,7 +189,7 @@ async function unfollowUser (req, res) {
 }
 async function getUsers(req, res) {
     try {
-        const users = await user.find().select('-password'); // Excluye la contraseña
+        const users = await User.find().select('-password'); // Excluye la contraseña
         return res.status(200).send({ users });
     } catch (err) {
         return res.status(500).send({ message: 'Error al obtener los usuarios', error: err.message });
