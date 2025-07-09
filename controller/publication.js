@@ -302,6 +302,46 @@ async function updatePublication(req, res) {
         return res.status(500).send({ message: 'Error al actualizar publicación', error: err.message });
     }
 }
+async function updateComment(req, res) {
+    const { id: publicationId, commentId } = req.params;
+    const userId = req.user.sub;
+    const { text } = req.body;
+
+    if (!text || !text.trim()) {
+        return res.status(400).send({ message: 'Debes enviar el nuevo texto del comentario' });
+    }
+
+    try {
+        // Buscar publicación
+        const publication = await Publication.findById(publicationId);
+        if (!publication) {
+            return res.status(404).send({ message: 'Publicación no encontrada' });
+        }
+
+        // Buscar comentario dentro de la publicación
+        const comment = publication.comments.id(commentId);
+        if (!comment) {
+            return res.status(404).send({ message: 'Comentario no encontrado' });
+        }
+
+        // Verificar si el comentario pertenece al usuario autenticado
+        if (comment.user?.toString() !== userId) {
+            return res.status(403).send({ message: 'No tienes permiso para editar este comentario' });
+        }
+
+        // Actualizar el texto del comentario
+        comment.text = text;
+        comment.updated_at = new Date(); // Opcional: añade esta propiedad en el schema si no existe
+
+        // Guardar los cambios
+        await publication.save();
+
+        return res.status(200).send({ message: 'Comentario actualizado', comment });
+    } catch (err) {
+        console.error('Error al actualizar comentario:', err);
+        return res.status(500).send({ message: 'Error al actualizar el comentario', error: err.message });
+    }
+}
 
 module.exports = {
     savePublication,
@@ -313,5 +353,6 @@ module.exports = {
     addComment,
     deleteComment,
     getMyPublications,
-    updatePublication
+    updatePublication,
+    updateComment
 };

@@ -12,6 +12,7 @@ title: { type: String, required: true },
         fileType: String // image | video | document | other
     }],
     created_at: String,
+    updated_at: String,
     user: { type: Schema.ObjectId, ref: 'User' },
     likes: [{ type: Schema.ObjectId, ref: 'User' }],
     comments: [{
