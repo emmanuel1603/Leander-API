@@ -18,5 +18,6 @@ api.put('/publication/like/:id', auth.ensureAuth, PublicationController.likePubl
 api.put('/publication/unlike/:id', auth.ensureAuth, PublicationController.unlikePublication);
 api.post('/publication/comment/:id', auth.ensureAuth, PublicationController.addComment);
 api.delete('/publication/comment/:id/:commentId', auth.ensureAuth, PublicationController.deleteComment);
-api.put('/publication/:id', md_auth.ensureAuth, PublicationController.updatePublication);
+api.put('/publication/:id', auth.ensureAuth, PublicationController.updatePublication);
+api.put('/publication/:id/comment/:commentId', auth.ensureAuth, PublicationController.updateComment);
 module.exports = api;
