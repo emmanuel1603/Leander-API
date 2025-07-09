@@ -279,6 +279,29 @@ async function getMyPublications(req, res) {
         return res.status(500).send({ message: 'Error al obtener tus publicaciones', error: err.message });
     }
 }
+async function updatePublication(req, res) {
+    const publicationId = req.params.id;
+    const userId = req.user.sub;
+    const { title, text } = req.body;
+
+    try {
+        const publication = await Publication.findOne({ _id: publicationId, user: userId });
+
+        if (!publication) {
+            return res.status(404).send({ message: 'Publicación no encontrada o no tienes permisos' });
+        }
+
+        publication.title = title || publication.title;
+        publication.text = text || publication.text;
+        publication.updated_at = moment().format();
+
+        const updatedPublication = await publication.save();
+
+        return res.status(200).send({ publication: updatedPublication });
+    } catch (err) {
+        return res.status(500).send({ message: 'Error al actualizar publicación', error: err.message });
+    }
+}
 
 module.exports = {
     savePublication,
@@ -289,5 +312,6 @@ module.exports = {
     unlikePublication,
     addComment,
     deleteComment,
-    getMyPublications
+    getMyPublications,
+    updatePublication
 };
