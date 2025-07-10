@@ -13,6 +13,7 @@ async function saveMessage(req, res) {
     }
 
     try {
+        // Crear instancia de mensaje
         const message = new Message({
             text,
             viewed: false,
@@ -21,41 +22,55 @@ async function saveMessage(req, res) {
             receiver
         });
 
+        // Guardar en la base de datos
         const messageStored = await message.save();
 
         if (!messageStored) {
             return res.status(404).send({ message: 'El mensaje no ha sido enviado' });
         }
 
-        // Obtener la instancia de Socket.IO
+        // ✅ Popula el emisor (quien envía)
+        const populatedMessage = await Message.findById(messageStored._id)
+            .populate('emitter', 'name surname image _id')
+            .populate('receiver', 'name surname image _id'); // Opcional si quieres también el receptor
+
+        // Obtener instancia de Socket.IO
         const io = req.app.get('socketio');
 
-        // Emitir el mensaje en tiempo real al receptor
-        // Asegúrate de que el receptor esté en una sala con su userId
-        io.to(receiver).emit('newMessage', messageStored);
-        console.log(`Mensaje enviado por WebSocket a ${receiver}`);
+        // ✅ Emitir el mensaje al receptor con los datos del emisor incluidos
+        io.to(receiver).emit('newMessage', populatedMessage);
+        console.log('📨 Mensaje enviado por WebSocket:', JSON.stringify(populatedMessage, null, 2));
 
-        // Crear una notificación para el mensaje
+        // Crear notificación relacionada al mensaje
         const notification = new Notification({
             type: 'message',
             read: false,
             created_at: new Date(),
             emitter: req.user.sub,
-            receiver: receiver,
-            message: messageStored._id // Referencia al mensaje
+            receiver,
+            message: messageStored._id
         });
-        await notification.save();
 
-        // Emitir la notificación en tiempo real al receptor
-        io.to(receiver).emit('newNotification', notification);
-        console.log(`Notificación de mensaje enviada por WebSocket a ${receiver}`);
+        const notificationStored = await notification.save();
 
+        // ✅ Popula emisor en la notificación para que incluya nombre e imagen
+        const populatedNotification = await Notification.findById(notificationStored._id)
+            .populate('emitter', 'name surname image _id');
 
-        return res.status(200).send({ message: messageStored });
+        // ✅ Emitir la notificación
+        io.to(receiver).emit('newNotification', populatedNotification);
+        console.log(`🔔 Notificación de mensaje enviada a `,JSON.stringify(populatedMessage, null, 2));
+
+        // Devolver mensaje al cliente
+        return res.status(200).send({ message: populatedMessage });
+
     } catch (err) {
+        console.error('❌ Error al enviar mensaje:', err);
         return res.status(500).send({ message: 'Error al enviar el mensaje', error: err.message });
     }
 }
+
+
 
 // Mensajes recibidos
 async function getReceivedMessages(req, res) {
@@ -64,7 +79,7 @@ async function getReceivedMessages(req, res) {
     try {
         const messages = await Message.find({ receiver: userId })
             .populate('emitter', 'name surname image _id');
-
+            
         if (!messages || messages.length === 0) {
             return res.status(404).send({ message: 'No hay mensajes' });
         }
@@ -81,17 +96,40 @@ async function getEmittedMessages(req, res) {
 
     try {
         const messages = await Message.find({ emitter: userId })
-            .populate('emitter receiver', 'name surname image _id');
+            .populate('emitter', 'name surname image _id')
+            .populate('receiver', 'name surname image _id')
+            .sort('-created_at');
 
         if (!messages || messages.length === 0) {
             return res.status(404).send({ message: 'No hay mensajes' });
         }
 
-        return res.status(200).send({ messages });
+        // Si deseas mostrar solo campos personalizados
+        const formattedMessages = messages.map(msg => ({
+            _id: msg._id,
+            text: msg.text,
+            created_at: msg.created_at,
+            viewed: msg.viewed,
+            emitter: {
+                _id: msg.emitter._id,
+                name: msg.emitter.name,
+                surname: msg.emitter.surname,
+                image: msg.emitter.image
+            },
+            receiver: {
+                _id: msg.receiver._id,
+                name: msg.receiver.name,
+                surname: msg.receiver.surname,
+                image: msg.receiver.image
+            }
+        }));
+
+        return res.status(200).send({ messages: formattedMessages });
     } catch (err) {
         return res.status(500).send({ message: 'Error en la petición', error: err.message });
     }
 }
+
 
 // Contador de no vistos
 async function getUnviewedMessages(req, res) {
