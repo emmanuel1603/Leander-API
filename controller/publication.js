@@ -183,6 +183,8 @@ async function likePublication(req, res) {
             io.to(publicationUpdated.user._id.toString()).emit('newNotification', populatedNotification);
             console.log(`🔔 Notificación de like enviada a ${publicationUpdated.user._id}`);
             console.log(populatedNotification);
+        } else {
+            console.log(`👍 Like dado por el autor de la publicación, no se envía notificación.`);
         }
 
         return res.status(200).send({ publication: publicationUpdated });
