@@ -19,67 +19,87 @@ function getFileType(mimetype) {
 // Guardar publicación con archivos
 
 
-    async function savePublication(req, res) {
-        
+async function savePublication(req, res) {
+    const { title, text } = req.body;
+    const userId = req.user.sub;
 
-        const { title, text } = req.body;
-        const userId = req.user.sub;
-
-        if (!title || !text) {
-            return res.status(400).send({ message: 'Título y texto son requeridos.' });
-        }
-
-        try {
-            const filesData = [];
-
-            if (req.files && req.files.length > 0) {
-                req.files.forEach(file => {
-                    filesData.push({
-                        path: file.path.replace(/\\/g, '/'),
-                        originalName: file.originalname,
-                        mimeType: file.mimetype,
-                        fileType: getFileType(file.mimetype)
-                    });
-                });
-            }
-
-            const publication = new Publication({
-                title,
-                text,
-                user: userId,
-                files: filesData,
-                created_at: moment().format()
-            });
-
-            const publicationStored = await publication.save();
-
-            // ✅ Emitir publicación a seguidores
-            const io = req.app.get('socketio');
-            // CAMBIO AQUÍ: Usar UserModel en lugar de User
-
-            const user = await UserModel.findById(userId).populate('followers', '_id');
-            
-            if (user?.followers?.length > 0) {
-    user.followers.forEach(follower => {
-        io.to(follower._id.toString()).emit('newPublication', {
-            publication: publicationStored,
-            author: {
-                _id: user._id,
-                name: user.name,
-                surname: user.surname,
-                image: user.image
-            }
-        });
-    });
-}
-
-
-            return res.status(200).send({ publication: publicationStored });
-
-        } catch (err) {
-            return res.status(500).send({ message: 'Error al guardar publicación', error: err.message });
-        }
+    if (!title || !text) {
+        return res.status(400).send({ message: 'Título y texto son requeridos.' });
     }
+
+    try {
+        const filesData = [];
+
+        if (req.files && req.files.length > 0) {
+            req.files.forEach(file => {
+                filesData.push({
+                    path: file.path.replace(/\\/g, '/'),
+                    originalName: file.originalname,
+                    mimeType: file.mimetype,
+                    fileType: getFileType(file.mimetype)
+                });
+            });
+        }
+
+        const publication = new Publication({
+            title,
+            text,
+            user: userId,
+            files: filesData,
+            created_at: moment().format()
+        });
+
+        const publicationStored = await publication.save();
+
+        const io = req.app.get('socketio');
+
+        const user = await UserModel.findById(userId).populate('followers', '_id name surname image');
+
+        const populatedPublication = await Publication.findById(publicationStored._id)
+            .populate('user', 'name surname image _id');
+
+        if (user?.followers?.length > 0) {
+            user.followers.forEach(async follower => {
+                const dataToSend = {
+                    publication: populatedPublication,
+                    author: {
+                        _id: user._id,
+                        name: user.name,
+                        surname: user.surname,
+                        image: user.image
+                    }
+                };
+
+                io.to(follower._id.toString()).emit('newPublication', dataToSend);
+                console.log(`📢 Publicación enviada a ${follower.name} ${follower.surname} (${follower._id})`);
+                console.log(dataToSend);
+
+                const notification = new Notification({
+                    type: 'publication',
+                    read: false,
+                    created_at: new Date(),
+                    emitter: userId,
+                    receiver: follower._id,
+                    publication: populatedPublication._id
+                });
+                const savedNotification = await notification.save();
+
+                const populatedNotification = await Notification.findById(savedNotification._id)
+                    .populate('emitter', 'name surname image _id')
+                    .populate('publication', '_id');
+
+                io.to(follower._id.toString()).emit('newNotification', populatedNotification);
+                console.log(`🔔 Notificación enviada a ${follower.name} (${follower._id})`);
+                console.log(populatedNotification);
+            });
+        }
+
+        return res.status(200).send({ publication: populatedPublication });
+
+    } catch (err) {
+        return res.status(500).send({ message: 'Error al guardar publicación', error: err.message });
+    }
+}
 
 
 
@@ -139,27 +159,30 @@ async function likePublication(req, res) {
             publicationId,
             { $addToSet: { likes: userId } },
             { new: true }
-        ).populate('user', '_id'); // Popula el usuario de la publicación para obtener su ID
+        ).populate('user', '_id');
 
         if (!publicationUpdated)
             return res.status(404).send({ message: 'No se ha podido dar like' });
 
-        // Si el usuario que da like no es el mismo que el autor de la publicación, crear notificación
         if (publicationUpdated.user._id.toString() !== userId) {
             const notification = new Notification({
                 type: 'like',
                 read: false,
                 created_at: new Date(),
-                emitter: userId, // Quien dio like
-                receiver: publicationUpdated.user._id, // Autor de la publicación
+                emitter: userId,
+                receiver: publicationUpdated.user._id,
                 publication: publicationUpdated._id
             });
-            await notification.save();
+            const savedNotification = await notification.save();
 
-            // Emitir la notificación en tiempo real al autor de la publicación
+            const populatedNotification = await Notification.findById(savedNotification._id)
+                .populate('emitter', 'name surname image _id')
+                .populate('publication', '_id');
+
             const io = req.app.get('socketio');
-            io.to(publicationUpdated.user._id.toString()).emit('newNotification', notification);
-            console.log(`Notificación de like enviada por WebSocket a ${publicationUpdated.user._id}`);
+            io.to(publicationUpdated.user._id.toString()).emit('newNotification', populatedNotification);
+            console.log(`🔔 Notificación de like enviada a ${publicationUpdated.user._id}`);
+            console.log(populatedNotification);
         }
 
         return res.status(200).send({ publication: publicationUpdated });
@@ -199,7 +222,7 @@ async function addComment(req, res) {
     const publicationId = req.params.id;
     const params = req.body;
 
-    if (!params.text) 
+    if (!params.text)
         return res.status(400).send({ message: 'Debes enviar un comentario' });
 
     const comment = {
@@ -213,27 +236,30 @@ async function addComment(req, res) {
             publicationId,
             { $push: { comments: comment } },
             { new: true }
-        ).populate('user', '_id'); // Popula el usuario de la publicación para obtener su ID
+        ).populate('user', '_id');
 
         if (!publicationUpdated)
             return res.status(404).send({ message: 'No se ha podido comentar' });
 
-        // Si el usuario que comenta no es el mismo que el autor de la publicación, crear notificación
         if (publicationUpdated.user._id.toString() !== req.user.sub) {
             const notification = new Notification({
                 type: 'comment',
                 read: false,
                 created_at: new Date(),
-                emitter: req.user.sub, // Quien comentó
-                receiver: publicationUpdated.user._id, // Autor de la publicación
+                emitter: req.user.sub,
+                receiver: publicationUpdated.user._id,
                 publication: publicationUpdated._id
             });
-            await notification.save();
+            const savedNotification = await notification.save();
 
-            // Emitir la notificación en tiempo real al autor de la publicación
+            const populatedNotification = await Notification.findById(savedNotification._id)
+                .populate('emitter', 'name surname image _id')
+                .populate('publication', '_id');
+
             const io = req.app.get('socketio');
-            io.to(publicationUpdated.user._id.toString()).emit('newNotification', notification);
-            console.log(`Notificación de comentario enviada por WebSocket a ${publicationUpdated.user._id}`);
+            io.to(publicationUpdated.user._id.toString()).emit('newNotification', populatedNotification);
+            console.log(`🔔 Notificación de comentario enviada a ${publicationUpdated.user._id}`);
+            console.log(populatedNotification);
         }
 
         return res.status(200).send({ publication: publicationUpdated });

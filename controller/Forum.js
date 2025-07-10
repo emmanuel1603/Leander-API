@@ -1,4 +1,6 @@
 const ForumPost = require('../models/Forum');
+const Notification = require('../models/notification');
+const User = require('../models/user');
 
 // Crear nueva pregunta
 async function createForumPost(req, res) {
@@ -8,9 +10,46 @@ async function createForumPost(req, res) {
 
     const newPost = new ForumPost({ title, text, user: userId });
     const savedPost = await newPost.save();
-    res.status(201).send({ post: savedPost });
+
+    // Populamos el post con datos del autor
+    const populatedPost = await ForumPost.findById(savedPost._id)
+      .populate('user', 'name surname image _id');
+
+    // Obtener la instancia de Socket.IO
+    const io = req.app.get('socketio');
+
+    // Buscar usuarios que siguen al autor
+    const followers = await User.find({ following: userId }).select('_id');
+
+    for (const follower of followers) {
+      const followerId = follower._id.toString();
+
+      // Emitir notificación al seguidor si está conectado
+      const notification = {
+        type: 'forum',
+        created_at: new Date(),
+        emitter: userId,
+        receiver: followerId,
+        forumPost: savedPost._id,
+        read: false
+      };
+
+      io.to(followerId).emit('newNotification', {
+        ...notification,
+        post: {
+          _id: populatedPost._id,
+          title: populatedPost.title,
+          user: populatedPost.user
+        }
+      });
+
+      console.log(`🔔 Notificación de foro enviada a seguidor: ${followerId}`);
+    }
+
+    return res.status(201).send({ post: populatedPost });
+
   } catch (err) {
-    res.status(500).send({ message: 'Error al crear post', error: err.message });
+    return res.status(500).send({ message: 'Error al crear post', error: err.message });
   }
 }
 

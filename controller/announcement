@@ -14,6 +14,7 @@ async function saveAnnouncement(req, res) {
     }
 
     try {
+        // Crear el anuncio
         const announcement = new Announcement({
             title: params.title,
             content: params.content,
@@ -23,11 +24,33 @@ async function saveAnnouncement(req, res) {
 
         const announcementStored = await announcement.save();
 
-        return res.status(200).send({ announcement: announcementStored });
+        // Obtener el anuncio poblado con los datos del usuario (nombre, imagen)
+        const populatedAnnouncement = await Announcement.findById(announcementStored._id)
+            .populate('user', 'name surname image _id');
+
+        // Obtener Socket.IO
+        const io = req.app.get('socketio');
+
+        // Emitir a todos los usuarios conectados, menos al creador
+        for (const [socketId, socket] of io.sockets.sockets) {
+            if (socket.userId !== userId) {
+                socket.emit('newAnnouncement', populatedAnnouncement);
+            }
+        }
+
+        // Mostrar en consola para depuración
+        console.log('📢 Anuncio emitido por WebSocket:', {
+            id: populatedAnnouncement._id,
+            title: populatedAnnouncement.title,
+            user: populatedAnnouncement.user.name + ' ' + populatedAnnouncement.user.surname
+        });
+
+        return res.status(200).send({ announcement: populatedAnnouncement });
     } catch (err) {
         return res.status(500).send({ message: 'Error al guardar el anuncio', error: err.message });
     }
 }
+
 
 // Obtener todos los anuncios
 async function getAnnouncements(req, res) {

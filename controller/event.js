@@ -1,31 +1,62 @@
 'use strict'
 
-var mongoose = require('mongoose');
-var Event = require('../models/event');
+const mongoose = require('mongoose');
+const Event = require('../models/event');
+const Notification = require('../models/notification');
+const User = require('../models/user');
 
 async function saveEvent(req, res) {
-    var params = req.body;
-    
+    const params = req.body;
+
     if (!params.title || !params.description || !params.date || !params.location) {
         return res.status(400).send({ message: 'Envía todos los campos necesarios' });
     }
 
     try {
-        var event = new Event();
-        event.title = params.title;
-        event.description = params.description;
-        event.date = params.date;
-        event.location = params.location;
-        event.created_at = new Date();
-        event.user = req.user.sub;
-        
+        const event = new Event({
+            title: params.title,
+            description: params.description,
+            date: params.date,
+            location: params.location,
+            image: params.image || null, // Asegúrate de permitir una imagen si existe
+            created_at: new Date(),
+            user: req.user.sub
+        });
+
         const eventStored = await event.save();
         if (!eventStored) {
             return res.status(404).send({ message: 'El evento no ha sido guardado' });
         }
-        
+
+        // 🔁 Obtener datos del creador para la notificación
+        const emitter = await User.findById(req.user.sub).select('name surname image');
+
+        // 🔁 Crear y guardar notificación para el nuevo evento
+        const notification = new Notification({
+            type: 'event',
+            read: false,
+            created_at: new Date(),
+            emitter: req.user.sub,
+            event: eventStored._id
+        });
+
+        const savedNotification = await notification.save();
+
+        // 🔁 Popula la notificación con datos del usuario y evento
+        const populatedNotification = await Notification.findById(savedNotification._id)
+            .populate('emitter', 'name surname image _id')
+            .populate('event', 'title image _id');
+
+        // ✅ Emitir notificación por WebSocket a todos los usuarios (o puedes personalizarlo)
+        const io = req.app.get('socketio');
+        io.emit('newNotification', populatedNotification);
+
+        console.log('📢 Notificación de evento enviada por WebSocket:', JSON.stringify(populatedNotification, null, 2));
+
         return res.status(201).send({ event: eventStored });
+
     } catch (err) {
+        console.error('❌ Error al guardar el evento y enviar notificación:', err);
         return res.status(500).send({ message: 'Error al guardar el evento', error: err.message });
     }
 }
