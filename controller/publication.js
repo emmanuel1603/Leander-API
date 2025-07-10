@@ -84,6 +84,20 @@ function getFileType(mimetype) {
 
 
 async function getPublications(req, res) {
+    try {
+        const publications = await Publication.find()
+            .populate('user', 'name surname image _id') // Autor de la publicación
+            .populate('comments.user', 'name surname image _id') // Autor de cada comentario
+            .sort('-created_at');
+
+        return res.status(200).send({ publications });
+
+    } catch (err) {
+        return res.status(500).send({ message: 'Error al obtener publicaciones', error: err.message });
+    }
+}
+
+async function getPublication(req, res) {
     const publicationId = req.params.id;
 
     try {
@@ -97,21 +111,6 @@ async function getPublications(req, res) {
         return res.status(200).send({ publication });
     } catch (err) {
         return res.status(500).send({ message: 'Error al devolver publicación', error: err.message });
-    }
-}
-
-async function getPublication(req, res) {
-    const publicationId = req.params.id;
-
-    try {
-        const publication = await Publication.findById(publicationId);
-
-        if (!publication)
-            return res.status(404).send({ message: 'No existe la publicación' });
-
-        return res.status(200).send({ publication });
-    } catch (err) {
-        return res.status(500).send({ message: 'Error al devolver publicaciones', error: err.message });
     }
 }
 
