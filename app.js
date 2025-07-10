@@ -21,7 +21,7 @@ app.use((req, res, next) => {
 });
 
 // Importar rutas
-
+var forumRoutes = require('./routes/forum');
 var user_routes = require('./routes/user');
 var publication_routes = require('./routes/publication');
 var message_routes = require('./routes/message');
@@ -30,7 +30,7 @@ var notification_routes = require('./routes/notification');
 var announcement_routes = require('./routes/announcement');
 
 // Usar rutas
-
+app.use('/api', forumRoutes);
 app.use('/api', user_routes);
 app.use('/api', publication_routes);
 app.use('/api', message_routes);
