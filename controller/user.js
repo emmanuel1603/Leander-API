@@ -168,8 +168,8 @@ async function unfollowUser (req, res) {
     }
 
     try {
-        const userToUnfollow = await user.findById(userId);
-        const follower = await user.findById(followerId);
+        const userToUnfollow = await User.findById(userId);
+        const follower = await User.findById(followerId);
 
         if (!userToUnfollow || !follower) {
             return res.status(404).send({ message: 'Usuario no encontrado' });
@@ -234,7 +234,7 @@ async function getUser(req, res) {
     const userId = req.params.id;
 
     try {
-        const userData = await user.findById(userId)
+        const userData = await User.findById(userId)
             .select('-password'); // Excluye la contraseña
 
         if (!userData) {
