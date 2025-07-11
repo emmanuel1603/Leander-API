@@ -7,7 +7,7 @@ var socketIo = require('socket.io'); // Importar Socket.IO
 var port = 3800;
 
 mongoose.Promise = global.Promise;
-mongoose.connect('mongodb://localhost:27017/Leander_db')
+mongoose.connect('mongodb+srv://emmanuel:Jio1603+654789@leander.6xltmab.mongodb.net/?retryWrites=true&w=majority&appName=Leander')
     .then(() => {
         console.log("La conexión a la base de datos ha sido exitosa");
 
