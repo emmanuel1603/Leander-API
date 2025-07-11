@@ -199,7 +199,7 @@ async function getFollowers(req, res) {
     const userId = req.params.id;
 
     try {
-        const userData = await user.findById(userId)
+        const userData = await User.findById(userId)
             .populate('followers', 'name surname nick email image')
             .select('followers');
 
@@ -217,7 +217,7 @@ async function getFollowing(req, res) {
     const userId = req.params.id;
 
     try {
-        const userData = await user.findById(userId)
+        const userData = await User.findById(userId)
             .populate('following', 'name surname nick email image')
             .select('following');
 
