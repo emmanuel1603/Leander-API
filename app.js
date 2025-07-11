@@ -21,7 +21,7 @@ app.use((req, res, next) => {
 });
 
 // Importar rutas
-var forumRoutes = require('./routes/forum');
+var forumRoutes = require('./routes/Forum');
 var user_routes = require('./routes/user');
 var publication_routes = require('./routes/publication');
 var message_routes = require('./routes/message');
