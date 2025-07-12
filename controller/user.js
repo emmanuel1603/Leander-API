@@ -272,9 +272,48 @@ async function updateUserRole(req, res) {
         return res.status(500).send({ message: 'Error al actualizar el rol', error: err.message });
     }
 }
+async function updateUserData(req, res) {
+    const userId = req.params.id;
+    const updates = req.body;
+
+    try {
+        const updateFields = {};
+
+        if (updates.name) updateFields.name = updates.name;
+        if (updates.surname) updateFields.surname = updates.surname;
+        if (updates.nick) updateFields.nick = updates.nick.toLowerCase();
+        if (updates.email) updateFields.email = updates.email.toLowerCase();
+        
+        // Solo si se pasa nueva contraseña
+        if (updates.password) {
+            updateFields.password = await argon2.hash(updates.password);
+        }
+
+        // Imagen si se sube
+        if (req.file) {
+            updateFields.image = `/uploads/user/${req.file.filename}`;
+        }
+
+        const updatedUser = await User.findByIdAndUpdate(
+            userId,
+            { $set: updateFields },
+            { new: true }
+        ).select('-password');
+
+        if (!updatedUser) {
+            return res.status(404).send({ message: 'Usuario no encontrado' });
+        }
+
+        return res.status(200).send({ message: 'Usuario actualizado', user: updatedUser });
+
+    } catch (err) {
+        return res.status(500).send({ message: 'Error al actualizar usuario', error: err.message });
+    }
+}
 
 // Exportar funciones
 module.exports = {
+    updateUserData,
     saveUser ,
     login,
     uploadImage,
