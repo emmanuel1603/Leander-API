@@ -16,7 +16,9 @@ var UserSchema = Schema({
     image: String,
     created_at: { type: Date, default: Date.now },
     followers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
-    following: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
+    following: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    question: String,
+    answer: String
 });
 
 // Método para cifrar la contraseña antes de guardar

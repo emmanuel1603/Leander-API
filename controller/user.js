@@ -5,6 +5,7 @@ var jwt = require('jwt-simple');
 var moment = require('moment');
 var fs = require('fs');
 var path = require('path');
+var argon2 = require('argon2');
 
 // Función para registrar usuario
 async function saveUser(req, res) {
@@ -53,7 +54,7 @@ async function saveUser(req, res) {
     }
 }
 
-// Función para iniciar sesión
+
 // Función para iniciar sesión
 async function login(req, res) {
     var params = req.body;
