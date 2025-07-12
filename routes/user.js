@@ -19,6 +19,6 @@ api.get('/followers/:id', md_auth.ensureAuth, UserController.getFollowers);
 api.get('/following/:id', md_auth.ensureAuth, UserController.getFollowing);
 api.get('/user/:id', md_auth.ensureAuth, UserController.getUser);
 api.put('/user/:id/role', md_auth.ensureAuth, UserController.updateUserRole);
-api.put('/user/update/:id', md_auth.ensureAuth, upload.single('image'), updateUserData);
+api.put('/user/update/:id', md_auth.ensureAuth, upload.single('image'), UserController.updateUserData);
 
 module.exports = api;
