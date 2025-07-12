@@ -374,6 +374,29 @@ async function updateComment(req, res) {
     }
 }
 
+
+async function getUserPublications(req, res) {
+    const targetUserId = req.params.userId; // usuario objetivo
+    const currentUserId = req.user.sub; // quien hace la consulta
+
+    if (targetUserId === currentUserId) {
+        return res.status(403).send({ message: 'No puedes consultar tus propias publicaciones con esta ruta' });
+    }
+
+    try {
+        const publications = await Publication.find({ user: targetUserId })
+            .populate('user', 'name surname image _id')
+            .sort('-created_at');
+
+        if (!publications || publications.length === 0) {
+            return res.status(404).send({ message: 'No se encontraron publicaciones de este usuario' });
+        }
+
+        return res.status(200).send({ publications });
+    } catch (err) {
+        return res.status(500).send({ message: 'Error al obtener publicaciones', error: err.message });
+    }
+}
 module.exports = {
     savePublication,
     getPublications,
@@ -385,5 +408,6 @@ module.exports = {
     deleteComment,
     getMyPublications,
     updatePublication,
-    updateComment
+    updateComment,
+    getUserPublications
 };

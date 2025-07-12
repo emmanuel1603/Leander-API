@@ -20,4 +20,5 @@ api.post('/publication/comment/:id', auth.ensureAuth, PublicationController.addC
 api.delete('/publication/comment/:id/:commentId', auth.ensureAuth, PublicationController.deleteComment);
 api.put('/publication/:id', auth.ensureAuth, PublicationController.updatePublication);
 api.put('/publication/:id/comment/:commentId', auth.ensureAuth, PublicationController.updateComment);
+api.get('/publications/user/:userId', auth.ensureAuth, PublicationController.getUserPublications);
 module.exports = api;
